@@ -7,6 +7,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 
 dotenv.config();
 
@@ -286,6 +287,94 @@ async function initializeDefaults() {
     console.log('Default site content created');
   }
 }
+
+// Contact form endpoint
+app.post('/api/contact', async (req, res) => {
+  try {
+    const { name, email, message } = req.body;
+    
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: 'Naam, email en bericht zijn verplicht' });
+    }
+    
+    // Create transporter (configure via env vars)
+    const transporter = nodemailer.createTransporter({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+    
+    const timestamp = new Date().toLocaleString('nl-NL', {
+      dateStyle: 'full',
+      timeStyle: 'short'
+    });
+    
+    // Send formatted email
+    await transporter.sendMail({
+      from: `"Sierraadsels Website" <${process.env.SMTP_USER}>`,
+      to: process.env.CONTACT_EMAIL || 'tillykraaijvanger@hotmail.com',
+      replyTo: email,
+      subject: `📧 Nieuwe Website Contact - ${name}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9f9f9;">
+          <div style="background: #333; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h2 style="margin: 0; font-weight: 300; letter-spacing: 2px;">SIERRAADSELS</h2>
+            <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.8;">Nieuw bericht via de website</p>
+          </div>
+          
+          <div style="background: white; padding: 30px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="border-left: 4px solid #666; padding-left: 15px; margin-bottom: 25px;">
+              <p style="margin: 0; color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Ontvangen op</p>
+              <p style="margin: 5px 0 0 0; color: #333; font-size: 16px;">${timestamp}</p>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+              <p style="margin: 0; color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Van</p>
+              <p style="margin: 5px 0 0 0; color: #333; font-size: 18px; font-weight: 500;">${name}</p>
+              <p style="margin: 3px 0 0 0; color: #888; font-size: 14px;">${email}</p>
+            </div>
+            
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-top: 20px;">
+              <p style="margin: 0 0 10px 0; color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Bericht</p>
+              <p style="margin: 0; color: #333; font-size: 15px; line-height: 1.6; white-space: pre-wrap;">${message.replace(/\n/g, '<br>')}</p>
+            </div>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
+              <p style="margin: 0; color: #999; font-size: 12px;">
+                Dit bericht is verzonden via het contactformulier op <a href="https://sierraadsels.nl" style="color: #666;">sierraadsels.nl</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      `,
+      text: `
+SIERRAADSELS - Nieuw Website Contact
+=====================================
+
+Ontvangen: ${timestamp}
+
+VAN:
+Naam: ${name}
+Email: ${email}
+
+BERICHT:
+${message}
+
+---
+Dit bericht is verzonden via het contactformulier op sierraadsels.nl
+      `,
+    });
+    
+    res.json({ success: true, message: 'Bericht verzonden!' });
+  } catch (error) {
+    console.error('Contact form error:', error);
+    res.status(500).json({ error: 'Er is een fout opgetreden bij het verzenden' });
+  }
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
